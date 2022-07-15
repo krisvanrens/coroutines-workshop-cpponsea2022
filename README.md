@@ -7,7 +7,6 @@ Coroutines workshop code for the conference C++ on Sea 2022.
 Requirements:
 
 * GCC v12 or higher
-* Clang-format v14 or higher,
 
 Instructions:
 
