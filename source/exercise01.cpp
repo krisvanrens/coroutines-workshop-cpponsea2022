@@ -1,8 +1,12 @@
+// - Compiler will guide you :-)
+// - Return object of `std::suspend_never` type from suspend points
+
 #include <exception>
 #include <future>
 #include <iostream>
 
-std::future<int> foo() {
+std::future<int> foo()
+{
   // std::promise<int> p;
   // auto f = p.get_future();
   // try {
@@ -17,6 +21,8 @@ std::future<int> foo() {
   co_return 42;
 }
 
-int main() {
+int main()
+{
   std::cout << foo().get() << "\n";
 }
+
