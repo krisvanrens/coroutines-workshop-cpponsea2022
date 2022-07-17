@@ -5,6 +5,13 @@ target_link_libraries(
   project_options
   project_warnings)
 
+add_executable(exercise01_generalized exercise01_generalized.cpp)
+target_link_libraries(
+  exercise01_generalized
+  PRIVATE
+  project_options
+  project_warnings)
+
 #add_executable(exercise02 exercise02.cpp)
 #target_link_libraries(
 #  exercise02
