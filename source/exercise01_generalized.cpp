@@ -61,22 +61,28 @@ struct std::coroutine_traits<std::future<void>, Args...> {
   };
 };
 
-std::future<int> foo() {
-  // std::promise<int> p;
-  // auto f = p.get_future();
-  // try {
-  //   int i = 42;
-  //   p.set_value(i);
-  // }
-  // catch(...) {
-  //   p.set_exception(std::current_exception());
-  // }
-  // return f;
+struct Blah {};
 
+std::future<int> func1() {
   co_return 42;
 }
 
+std::future<float> func2() {
+  co_return 3.141592f;
+}
+
+std::future<Blah> func3() {
+  co_return Blah{};
+}
+
+std::future<void> func4() {
+  co_return;
+}
+
 int main() {
-  std::cout << foo().get() << "\n";
+  std::cout << func1().get() << "\n";
+  std::cout << func2().get() << "\n";
+  func3().get();
+  func4().get();
 }
 
