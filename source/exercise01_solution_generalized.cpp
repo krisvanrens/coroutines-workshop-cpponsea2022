@@ -1,7 +1,9 @@
+#include <concepts>
 #include <coroutine>
 #include <exception>
 #include <future>
 #include <iostream>
+#include <utility>
 
 template<typename T, typename... Args>
 struct std::coroutine_traits<std::future<T>, Args...> {
@@ -16,20 +18,17 @@ struct std::coroutine_traits<std::future<T>, Args...> {
       this->set_exception(std::current_exception());
     }
 
-    std::suspend_never initial_suspend() const noexcept {
+    static std::suspend_never initial_suspend() noexcept {
       return {};
     }
 
-    std::suspend_never final_suspend() const noexcept {
+    static std::suspend_never final_suspend() noexcept {
       return {};
     }
 
-    void return_value(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
-      this->set_value(value);
-    }
-
-    void return_value(T&& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
-      this->set_value(std::move(value));
+    template<std::convertible_to<T> U>
+    void return_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
+      this->set_value(std::forward<U>(value));
     }
   };
 };
@@ -47,11 +46,11 @@ struct std::coroutine_traits<std::future<void>, Args...> {
       this->set_exception(std::current_exception());
     }
 
-    std::suspend_never initial_suspend() const noexcept {
+    static std::suspend_never initial_suspend() noexcept {
       return {};
     }
 
-    std::suspend_never final_suspend() const noexcept {
+    static std::suspend_never final_suspend() noexcept {
       return {};
     }
 

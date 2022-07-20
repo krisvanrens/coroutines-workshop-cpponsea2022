@@ -2,6 +2,7 @@
 #include <exception>
 #include <future>
 #include <iostream>
+#include <utility>
 
 template<typename... Args>
 struct std::coroutine_traits<std::future<int>, Args...> {
@@ -16,11 +17,11 @@ struct std::coroutine_traits<std::future<int>, Args...> {
       this->set_exception(std::current_exception());
     }
 
-    std::suspend_never initial_suspend() const noexcept {
+    static std::suspend_never initial_suspend() noexcept {
       return {};
     }
 
-    std::suspend_never final_suspend() const noexcept {
+    static std::suspend_never final_suspend() noexcept {
       return {};
     }
 
