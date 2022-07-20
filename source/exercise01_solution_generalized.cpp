@@ -24,11 +24,11 @@ struct std::coroutine_traits<std::future<T>, Args...> {
       return {};
     }
 
-    void return_value(const T &value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
+    void return_value(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
       this->set_value(value);
     }
 
-    void return_value(T &&value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
+    void return_value(T&& value) noexcept(std::is_nothrow_copy_constructible_v<T>) {
       this->set_value(std::move(value));
     }
   };
@@ -85,4 +85,3 @@ int main() {
   func3().get();
   func4().get();
 }
-
