@@ -31,5 +31,8 @@
 *.out
 *.app
 
+# Tools directory
+tools/
+
 build/
 .DS_Store
