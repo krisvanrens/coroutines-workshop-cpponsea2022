@@ -54,7 +54,7 @@ template<std::movable T>
 class [[nodiscard]] task {
 public:
   struct promise_type {
-    std::optional<T> value_;
+    std::optional<T> result_;
 
     task get_return_object() noexcept {
       return this;
@@ -70,7 +70,7 @@ public:
 
     template<std::convertible_to<T> U>
     void return_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
-      value_ = std::forward<U>(value);
+      result_ = std::forward<U>(value);
     }
 
     [[noreturn]] static void unhandled_exception() {
@@ -82,11 +82,11 @@ public:
   task operator=(const task&) = delete;
 
   [[nodiscard]] const T& get_result() const& noexcept {
-    return *promise_->value_;
+    return *promise_->result_;
   }
 
   [[nodiscard]] T&& get_result() const&& noexcept {
-    return *std::move(promise_->value_);
+    return *std::move(promise_->result_);
   }
 
 private:
