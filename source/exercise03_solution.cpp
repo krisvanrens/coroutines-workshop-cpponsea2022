@@ -17,11 +17,30 @@ struct coro_deleter {
 template<typename T>
 using promise_ptr = std::unique_ptr<T, coro_deleter>;
 
-template<typename T>
-struct [[nodiscard]] task {
-  struct promise_type {
-    std::optional<T> value_;
+namespace detail {
 
+template<typename T>
+struct task_promise_storage {
+  std::optional<T> result_;
+
+  template<std::convertible_to<T> U>
+  void return_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
+    result_ = std::forward<U>(value);
+  }
+};
+
+template<>
+struct task_promise_storage<void> {
+  void return_void() const noexcept {
+  }
+};
+
+} // namespace detail
+
+template<typename T>
+requires std::movable<T> || std::is_void_v<T>
+struct [[nodiscard]] task {
+  struct promise_type : detail::task_promise_storage<T> {
     task get_return_object() noexcept {
       return this;
     }
@@ -32,11 +51,6 @@ struct [[nodiscard]] task {
 
     static std::suspend_always final_suspend() noexcept {
       return {};
-    }
-
-    template<std::convertible_to<T> U>
-    void return_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
-      value_ = std::forward<U>(value);
     }
 
     [[noreturn]] static void unhandled_exception() {
@@ -44,25 +58,25 @@ struct [[nodiscard]] task {
     }
   };
 
-  [[nodiscard]] const T& get_result() const& noexcept {
-    return *promise_->value_;
+  [[nodiscard]] decltype(auto) get_result() const& noexcept requires std::movable<T> {
+    return *promise_->result_;
   }
 
-  [[nodiscard]] T&& get_result() const&& noexcept {
-    return *std::move(promise_->value_);
+  [[nodiscard]] decltype(auto) get_result() const&& noexcept requires std::movable<T> {
+    return *std::move(promise_->result_);
   }
 
 private:
   promise_ptr<promise_type> promise_;
 
-  task(promise_type* p)
-    : promise_(p) {
+  task(promise_type* promise)
+    : promise_{promise} {
   }
 };
 
 template<>
 struct [[nodiscard]] task<void> {
-  struct promise_type {
+  struct promise_type : detail::task_promise_storage<void> {
     task get_return_object() noexcept {
       return this;
     }
@@ -73,9 +87,6 @@ struct [[nodiscard]] task<void> {
 
     static std::suspend_always final_suspend() noexcept {
       return {};
-    }
-
-    void return_void() {
     }
 
     [[noreturn]] static void unhandled_exception() {
