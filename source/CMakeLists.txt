@@ -19,12 +19,12 @@ target_link_libraries(
   project_options
   project_warnings)
 
-#add_executable(exercise03 exercise03_solution.cpp)
-#target_link_libraries(
-#  exercise03
-#  PRIVATE
-#  project_options
-#  project_warnings)
+add_executable(exercise03 exercise03_solution.cpp)
+target_link_libraries(
+  exercise03
+  PRIVATE
+  project_options
+  project_warnings)
 
 #add_executable(exercise04 exercise04_solution.cpp)
 #target_link_libraries(
