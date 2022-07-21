@@ -40,7 +40,7 @@ std::future<int> func1() {
 
 struct coro_deleter {
   template<typename Promise>
-  void operator()(Promise* promise) {
+  void operator()(Promise* promise) const noexcept {
     if (auto handle = std::coroutine_handle<Promise>::from_promise(*promise); handle) {
       handle.destroy();
     }
