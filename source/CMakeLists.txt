@@ -47,12 +47,12 @@ target_link_libraries(
   project_options
   project_warnings)
 
-#add_executable(exercise07 exercise07_solution.cpp)
-#target_link_libraries(
-#  exercise07
-#  PRIVATE
-#  project_options
-#  project_warnings)
+add_executable(exercise07 exercise07_solution.cpp)
+target_link_libraries(
+  exercise07
+  PRIVATE
+  project_options
+  project_warnings)
 
 #add_executable(exercise08 exercise08_solution.cpp)
 #target_link_libraries(
