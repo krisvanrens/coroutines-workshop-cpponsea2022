@@ -102,14 +102,14 @@ task<int> func1() {
 }
 
 task<int> func2() {
-  const int res = co_await func1();
-  std::cout << "Result of func1: " << res << "\n";
-  co_return res + 23;
+  const int result = co_await func1();
+  std::cout << "Result of func1: " << result << "\n";
+  co_return result + 23;
 }
 
 task<void> func3() {
-  const auto res = co_await func2();
-  std::cout << "Result of func2: " << res << "\n";
+  const auto result = co_await func2();
+  std::cout << "Result of func2: " << result << "\n";
 }
 
 task<void> run() {
