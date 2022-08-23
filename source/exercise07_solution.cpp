@@ -1,6 +1,3 @@
-// - `task<T>` should
-//   - always suspend on initialization
-//   - provide `start()` member function
 // - On suspend `task<T>` awaiter should store a continuation handle in the promise
 //   and perform Symmetric Control Transfer
 // - Provide a dedicated awaiter for the final suspend
@@ -109,7 +106,7 @@ struct [[nodiscard]] task {
       return this;
     }
 
-    static std::suspend_never initial_suspend() noexcept {
+    static std::suspend_always initial_suspend() noexcept {
       return {};
     }
 
@@ -148,6 +145,10 @@ struct [[nodiscard]] task {
     return *std::move(promise_->result_);
   }
 
+  void start() const {
+    // TODO
+  }
+
 private:
   struct awaiter {
     promise_type& promise_;
@@ -179,14 +180,14 @@ task<int> func1() {
 }
 
 task<int> func2() {
-  const int res = co_await func1();
-  std::cout << "Result of func1: " << res << "\n";
-  co_return res + 23;
+  const int result = co_await func1();
+  std::cout << "Result of func1: " << result << "\n";
+  co_return result + 23;
 }
 
 task<void> func3() {
-  const auto res = co_await func2();
-  std::cout << "Result of func2: " << res << "\n";
+  const auto result = co_await func2();
+  std::cout << "Result of func2: " << result << "\n";
 }
 
 task<void> run() {
