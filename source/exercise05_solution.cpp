@@ -113,13 +113,13 @@ struct std::coroutine_traits<std::future<R>, Args...> {
   };
 };
 
-template<class Rep, class Period>
-constexpr auto operator co_await(const std::chrono::duration<Rep, Period>& duration) {
+template<specialization_of<std::chrono::duration> D>
+constexpr auto operator co_await(const D& duration) {
   struct awaiter {
-    const std::chrono::duration<Rep, Period>& duration;
+    const D& duration;
 
     bool await_ready() const noexcept {
-      return duration <= std::chrono::duration<Rep, Period>::zero();
+      return duration <= D::zero();
     }
 
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> handle) const {
