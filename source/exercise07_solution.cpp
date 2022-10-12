@@ -69,9 +69,9 @@ concept awaiter_of = awaiter<T> && requires(T&& t) {
 struct coro_deleter {
   template<typename Promise>
   void operator()(Promise* promise) const noexcept {
-    auto handle = std::coroutine_handle<Promise>::from_promise(*promise);
-    if (handle)
+    if (auto handle = std::coroutine_handle<Promise>::from_promise(*promise); handle) {
       handle.destroy();
+    }
   }
 };
 
