@@ -1,9 +1,3 @@
-// - On suspend `task<T>` awaiter should store a continuation handle in the promise
-//   and perform Symmetric Control Transfer
-// - Provide a dedicated awaiter for the final suspend
-//   - it should always suspend the coroutine
-//   - upon suspension it should resume the continuation (if set)
-
 #include <concepts>
 #include <coroutine>
 #include <iostream>
@@ -102,6 +96,8 @@ template<typename T>
 requires std::movable<T> || std::is_void_v<T>
 struct [[nodiscard]] task {
   struct promise_type : detail::task_promise_storage<T> {
+    std::coroutine_handle<> continuation_ = std::noop_coroutine();
+
     task get_return_object() noexcept {
       return this;
     }
@@ -110,8 +106,14 @@ struct [[nodiscard]] task {
       return {};
     }
 
-    static std::suspend_always final_suspend() noexcept {
-      return {};
+    static auto final_suspend() noexcept {
+      struct final_awaiter : std::suspend_always {
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
+          return handle.promise().continuation_;
+        }
+      };
+
+      return final_awaiter{};
     }
 
     [[noreturn]] static void unhandled_exception() {
@@ -146,7 +148,7 @@ struct [[nodiscard]] task {
   }
 
   void start() const {
-    // TODO
+    std::coroutine_handle<promise_type>::from_promise(*promise_).resume();
   }
 
 private:
@@ -157,7 +159,9 @@ private:
       return std::coroutine_handle<promise_type>::from_promise(promise_).done();
     }
 
-    void await_suspend(std::coroutine_handle<>) const noexcept {
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
+      promise_.continuation_ = continuation;
+      return std::coroutine_handle<promise_type>::from_promise(promise_);
     }
 
     void await_resume() const requires std::is_void_v<T> {
