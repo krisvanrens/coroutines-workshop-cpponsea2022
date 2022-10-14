@@ -209,7 +209,7 @@ struct [[nodiscard]] task {
   awaiter_of<T&&> auto operator co_await() const&& noexcept {
     struct rvalue_awaiter : awaiter {
       T&& await_resume() const {
-        return std::move(this->promise).get();
+        return std::move(this->promise_).get();
       }
     };
 
@@ -230,28 +230,72 @@ struct [[nodiscard]] task {
 
 private:
   struct awaiter {
-    promise_type& promise;
+    promise_type& promise_;
 
     bool await_ready() const noexcept {
-      return std::coroutine_handle<promise_type>::from_promise(promise).done();
+      return std::coroutine_handle<promise_type>::from_promise(promise_).done();
     }
 
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-      promise.continuation_ = continuation;
-      return std::coroutine_handle<promise_type>::from_promise(promise);
+      promise_.continuation_ = continuation;
+      return std::coroutine_handle<promise_type>::from_promise(promise_);
     }
 
     decltype(auto) await_resume() const {
-      return promise.get();
+      return promise_.get();
     }
   };
 
-  task(promise_type* p)
-    : promise_(p) {
+  task(promise_type* promise)
+    : promise_{promise} {
   }
 
   promise_ptr<promise_type> promise_;
 };
+
+template<std::invocable Func>
+class [[nodiscard]] async final {
+public:
+  template<typename Func_> requires std::same_as<std::remove_cvref_t<Func_>, Func>
+  explicit async(Func_&& func)
+    : func_{std::forward<Func_>(func)} {
+  }
+
+  // Only allow awaiting of rvalues to prevent multiple awaits.
+  decltype(auto) operator co_await() & = delete;
+
+  decltype(auto) operator co_await() && {
+    struct awaiter {
+      async& awaitable;
+
+      bool await_ready() const noexcept {
+        return false;
+      }
+
+      void await_suspend(std::coroutine_handle<> handle) const noexcept {
+
+        // TODO
+
+        handle.resume();
+      }
+
+      decltype(auto) await_resume() const {
+        return std::move(awaitable.result_).get();
+      }
+    };
+
+    return awaiter{*this};
+  }
+
+private:
+  using result_type = std::invoke_result_t<Func>;
+
+  Func func_;
+  storage<result_type> result_;
+};
+
+template<typename Func>
+async(Func) -> async<Func>;
 
 task<int> func1() {
   const int result = co_await async([] { return 42; });
