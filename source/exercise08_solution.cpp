@@ -256,7 +256,8 @@ private:
 template<std::invocable Func>
 class [[nodiscard]] async final {
 public:
-  template<typename Func_> requires std::same_as<std::remove_cvref_t<Func_>, Func>
+  template<typename Func_>
+  requires std::same_as<std::remove_cvref_t<Func_>, Func>
   explicit async(Func_&& func)
     : func_{std::forward<Func_>(func)} {
   }
@@ -273,10 +274,21 @@ public:
       }
 
       void await_suspend(std::coroutine_handle<> handle) const noexcept {
+        const auto work = [&, handle] {
+          try {
+            if constexpr (std::is_void_v<result_type>) {
+              awaitable.func_();
+            } else {
+              awaitable.result_.set_value(awaitable.func_());
+            }
+          } catch (...) {
+            awaitable.result_.set_exception(std::current_exception());
+          }
 
-        // TODO
+          handle.resume();
+        };
 
-        handle.resume();
+        std::jthread{work}.detach();
       }
 
       decltype(auto) await_resume() const {
@@ -290,7 +302,7 @@ public:
 private:
   using result_type = std::invoke_result_t<Func>;
 
-  Func func_;
+  Func                 func_;
   storage<result_type> result_;
 };
 
@@ -327,17 +339,17 @@ task<void> example() {
 }
 
 template<typename T>
-void test(task<T> t) {
+void test(task<T> task) {
   try {
-    t.start();
+    task.start();
 
     using namespace std::chrono_literals;
     std::this_thread::sleep_for(200ms);
 
     if constexpr (std::is_void_v<T>) {
-      t.get();
+      task.get();
     } else {
-      std::cout << "Result: " << t.get() << '\n';
+      std::cout << "Result: " << task.get() << '\n';
     }
   } catch (const std::exception& ex) {
     std::cout << "Exception caught: " << ex.what() << "\n";

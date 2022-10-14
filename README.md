@@ -29,7 +29,7 @@ make
 - [ ] Exercise 5
 - [x] Exercise 6
 - [x] Exercise 7
-- [ ] Exercise 8
+- [x] Exercise 8
 - [ ] Exercise 9
 - [ ] Exercise 10
 - [ ] Exercise 11
