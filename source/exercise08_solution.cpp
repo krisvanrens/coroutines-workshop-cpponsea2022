@@ -28,49 +28,49 @@ class storage_base {
 protected:
   using value_type = std::remove_reference_t<T>; // In case of T&&.
                                                  //
-  std::variant<std::monostate, std::exception_ptr, value_type> result;
+  std::variant<std::monostate, std::exception_ptr, value_type> result_;
 
 public:
   template<std::convertible_to<value_type> U>
   void set_value(U&& value) noexcept(std::is_nothrow_constructible_v<value_type, decltype(std::forward<U>(value))>) {
-    result.template emplace<value_type>(std::forward<U>(value));
+    result_.template emplace<value_type>(std::forward<U>(value));
   }
 
   [[nodiscard]] const value_type& get() const& {
-    check_and_rethrow(this->result);
-    return std::get<value_type>(this->result);
+    check_and_rethrow(this->result_);
+    return std::get<value_type>(this->result_);
   }
 
   [[nodiscard]] value_type&& get() && {
-    check_and_rethrow(this->result);
-    return std::get<value_type>(std::move(this->result));
+    check_and_rethrow(this->result_);
+    return std::get<value_type>(std::move(this->result_));
   }
 };
 
 template<typename T>
 class storage_base<T&> {
 protected:
-  std::variant<std::monostate, std::exception_ptr, T*> result;
+  std::variant<std::monostate, std::exception_ptr, T*> result_;
 
 public:
   void set_value(T& value) noexcept {
-    result = std::addressof(value);
+    result_ = std::addressof(value);
   }
 
   [[nodiscard]] const T& get() const {
-    check_and_rethrow(this->result);
-    return *std::get<T*>(this->result);
+    check_and_rethrow(this->result_);
+    return *std::get<T*>(this->result_);
   }
 };
 
 template<>
 class storage_base<void> {
 protected:
-  std::variant<std::monostate, std::exception_ptr> result;
+  std::variant<std::monostate, std::exception_ptr> result_;
 
 public:
   void get() const {
-    check_and_rethrow(this->result);
+    check_and_rethrow(this->result_);
   }
 };
 
@@ -78,7 +78,7 @@ template<typename T>
 class storage : public storage_base<T> {
 public:
   void set_exception(std::exception_ptr ptr) noexcept {
-    this->result = std::move(ptr);
+    this->result_ = std::move(ptr);
   }
 };
 
