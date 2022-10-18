@@ -1,10 +1,11 @@
-// - Implement `async<Func>` awaiter that
-//   - keeps the result in our `storage<T>` class
-//   - runs any invocable in a detached thread
-//   - captures the exception from the invocable (if any) and rethrows on resume
-//   - returns a result of the invocable (if any)
+// - Implement `synchronized_task<T>`
+//   - `promise_type` should inherit from `task_promise_storage`
+//   - it should get a synchronization primitive through `start()` member function and release it on
+//     the final suspend
+//   - `get()` should return a value or rethrow an exception (if set)
+// - `task<T>` does not need any custom interface anymore
+//   - remove `start()` and `get()`
 
-#include <chrono>
 #include <concepts>
 #include <coroutine>
 #include <exception>
@@ -26,24 +27,22 @@ void check_and_rethrow(const std::variant<Args...>& result) {
 template<typename T>
 class storage_base {
 protected:
-  using value_type = std::remove_reference_t<T>; // In case of T&&.
-
-  std::variant<std::monostate, std::exception_ptr, value_type> result_;
+  std::variant<std::monostate, std::exception_ptr, T> result_;
 
 public:
-  template<std::convertible_to<value_type> U>
-  void set_value(U&& value) noexcept(std::is_nothrow_constructible_v<value_type, decltype(std::forward<U>(value))>) {
-    result_.template emplace<value_type>(std::forward<U>(value));
+  template<std::convertible_to<T> U>
+  void set_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
+    result_.template emplace<T>(std::forward<U>(value));
   }
 
-  [[nodiscard]] const value_type& get() const& {
+  [[nodiscard]] const T& get() const& {
     check_and_rethrow(this->result_);
-    return std::get<value_type>(this->result_);
+    return std::get<T>(this->result_);
   }
 
-  [[nodiscard]] value_type&& get() && {
+  [[nodiscard]] T&& get() && {
     check_and_rethrow(this->result_);
-    return std::get<value_type>(std::move(this->result_));
+    return std::get<T>(std::move(this->result_));
   }
 };
 
@@ -57,7 +56,7 @@ public:
     result_ = std::addressof(value);
   }
 
-  [[nodiscard]] const T& get() const {
+  [[nodiscard]] T& get() const {
     check_and_rethrow(this->result_);
     return *std::get<T*>(this->result_);
   }
@@ -77,10 +76,26 @@ public:
 template<typename T>
 class storage : public storage_base<T> {
 public:
+  using value_type = T;
   void set_exception(std::exception_ptr ptr) noexcept {
     this->result_ = std::move(ptr);
   }
 };
+
+namespace detail {
+
+template<typename T>
+decltype(auto) get_awaiter(T&& awaitable) {
+  if constexpr (requires { std::forward<T>(awaitable).operator co_await(); }) {
+    return std::forward<T>(awaitable).operator co_await();
+  } else if constexpr (requires { operator co_await(std::forward<T>(awaitable)); }) {
+    return operator co_await(std::forward<T>(awaitable));
+  } else {
+    return std::forward<T>(awaitable);
+  }
+}
+
+} // namespace detail
 
 namespace detail {
 
@@ -94,6 +109,19 @@ inline constexpr bool is_specialization_of<Type<Params...>, Type> = true;
 
 template<typename T, template<typename...> typename Type>
 concept specialization_of = detail::is_specialization_of<T, Type>;
+
+template<typename T>
+struct remove_rvalue_reference {
+  using type = T;
+};
+
+template<typename T>
+struct remove_rvalue_reference<T&&> {
+  using type = T;
+};
+
+template<typename T>
+using remove_rvalue_reference_t = typename remove_rvalue_reference<T>::type;
 
 namespace detail {
 
@@ -126,7 +154,7 @@ concept suspend_return_type = std::is_void_v<T> || std::is_same_v<T, bool> || sp
 template<typename T>
 concept awaiter = requires(T&& t, decltype(detail::func_arg(&std::remove_reference_t<T>::await_suspend)) arg) {
   { std::forward<T>(t).await_ready() } -> std::convertible_to<bool>;
-  { arg } -> std::convertible_to<std::coroutine_handle<>>; // TODO: Why does GCC not inherit from `std::coroutine_handle<>`?
+  { arg } -> std::convertible_to<std::coroutine_handle<>>; // TODO Why gcc does not inherit from `std::coroutine_handle<>`?
   { std::forward<T>(t).await_suspend(arg) } -> detail::suspend_return_type;
   std::forward<T>(t).await_resume();
 };
@@ -135,6 +163,19 @@ template<typename T, typename Value>
 concept awaiter_of = awaiter<T> && requires(T&& t) {
   { std::forward<T>(t).await_resume() } -> std::same_as<Value>;
 };
+
+template<typename T>
+concept awaitable = requires(T&& t) {
+  { detail::get_awaiter(std::forward<T>(t)) } -> awaiter;
+};
+
+template<typename T, typename Value>
+concept awaitable_of = awaitable<T> && requires(T&& t) {
+  { detail::get_awaiter(std::forward<T>(t)) } -> awaiter_of<Value>;
+};
+
+template<typename T>
+concept task_value_type = std::move_constructible<T> || std::is_reference_v<T> || std::is_void_v<T>;
 
 struct coro_deleter {
   template<typename Promise>
@@ -152,41 +193,42 @@ namespace detail {
 
 template<typename T>
 struct task_promise_storage_base : storage<T> {
-  template<std::convertible_to<T> U>
-  void return_value(U&& value) noexcept(std::is_nothrow_constructible_v<T, decltype(std::forward<U>(value))>) {
-    this->set_value(std::forward<U>(value));
-  }
-};
-
-template<>
-struct task_promise_storage_base<void> : storage<void> {
-  void return_void() noexcept {
-  }
-};
-
-template<typename T>
-struct task_promise_storage : task_promise_storage_base<T> {
   void unhandled_exception() noexcept(noexcept(this->set_exception(std::current_exception()))) {
     this->set_exception(std::current_exception());
   }
 };
 
+template<typename T>
+struct task_promise_storage : task_promise_storage_base<T> {
+  template<typename U>
+  void return_value(U&& value) noexcept(noexcept(this->set_value(std::forward<U>(value)))) requires requires {
+    this->set_value(std::forward<U>(value));
+  }
+  { this->set_value(std::forward<U>(value)); }
+};
+
+template<>
+struct task_promise_storage<void> : task_promise_storage_base<void> {
+  void return_void() noexcept {
+  }
+};
+
 } // namespace detail
 
-template<typename T>
-requires std::movable<T> || std::is_void_v<T>
-struct [[nodiscard]] task {
+template<task_value_type T = void, typename Allocator = void>
+class [[nodiscard]] task {
+public:
   struct promise_type : detail::task_promise_storage<T> {
-    std::coroutine_handle<> continuation_ = std::noop_coroutine();
+    std::coroutine_handle<> continuation = std::noop_coroutine();
 
     static std::suspend_always initial_suspend() noexcept {
       return {};
     }
 
-    static auto final_suspend() noexcept {
+    static awaiter_of<void> auto final_suspend() noexcept {
       struct final_awaiter : std::suspend_always {
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> handle) noexcept {
-          return handle.promise().continuation_;
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> h) noexcept {
+          return h.promise().continuation;
         }
       };
 
@@ -198,21 +240,20 @@ struct [[nodiscard]] task {
     }
   };
 
-  awaiter_of<void> auto operator co_await() const noexcept requires std::is_void_v<T> {
+  awaiter_of<T> auto operator co_await() const noexcept {
     return awaiter(*promise_);
   }
 
-  awaiter_of<const T&> auto operator co_await() const& noexcept {
+  awaiter_of<const T&> auto operator co_await() const& noexcept requires std::move_constructible<T> {
     return awaiter(*promise_);
   }
 
-  awaiter_of<T&&> auto operator co_await() const&& noexcept {
+  awaiter_of<T&&> auto operator co_await() const&& noexcept requires std::move_constructible<T> {
     struct rvalue_awaiter : awaiter {
-      T&& await_resume() const {
-        return std::move(this->promise_).get();
+      T&& await_resume() {
+        return std::move(this->promise).get();
       }
     };
-
     return rvalue_awaiter({*promise_});
   }
 
@@ -230,41 +271,41 @@ struct [[nodiscard]] task {
 
 private:
   struct awaiter {
-    promise_type& promise_;
+    promise_type& promise;
 
     bool await_ready() const noexcept {
-      return std::coroutine_handle<promise_type>::from_promise(promise_).done();
+      return std::coroutine_handle<promise_type>::from_promise(promise).done();
     }
 
     std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-      promise_.continuation_ = continuation;
-      return std::coroutine_handle<promise_type>::from_promise(promise_);
+      promise.continuation = continuation;
+      return std::coroutine_handle<promise_type>::from_promise(promise);
     }
 
     decltype(auto) await_resume() const {
-      return promise_.get();
+      return promise.get();
     }
   };
 
-  task(promise_type* promise)
-    : promise_{promise} {
-  }
-
   promise_ptr<promise_type> promise_;
+
+  task(promise_type* promise)
+    : promise_(promise) {
+  }
 };
 
 template<std::invocable Func>
-class [[nodiscard]] async final {
+class async {
 public:
-  template<typename Func_>
-  requires std::same_as<std::remove_cvref_t<Func_>, Func>
-  explicit async(Func_&& func)
-    : func_{std::forward<Func_>(func)} {
+  using return_type = std::invoke_result_t<Func>;
+
+  template<typename F>
+  requires std::same_as<std::remove_cvref_t<F>, Func>
+  explicit async(F&& func)
+    : func_{std::forward<F>(func)} {
   }
 
-  // Only allow awaiting of rvalues to prevent multiple awaits.
-  decltype(auto) operator co_await() & = delete;
-
+  decltype(auto) operator co_await() & = delete; // async should be co_awaited only once (on rvalue)
   decltype(auto) operator co_await() && {
     struct awaiter {
       async& awaitable;
@@ -273,10 +314,10 @@ public:
         return false;
       }
 
-      void await_suspend(std::coroutine_handle<> handle) const noexcept {
-        const auto work = [&, handle] {
+      void await_suspend(std::coroutine_handle<> handle) {
+        auto work = [&, handle]() {
           try {
-            if constexpr (std::is_void_v<result_type>) {
+            if constexpr (std::is_void_v<return_type>) {
               awaitable.func_();
             } else {
               awaitable.result_.set_value(awaitable.func_());
@@ -288,10 +329,10 @@ public:
           handle.resume();
         };
 
-        std::jthread{work}.detach();
+        std::jthread(work).detach();
       }
 
-      decltype(auto) await_resume() const {
+      decltype(auto) await_resume() {
         return std::move(awaitable.result_).get();
       }
     };
@@ -300,14 +341,57 @@ public:
   }
 
 private:
-  using result_type = std::invoke_result_t<Func>;
-
   Func                 func_;
-  storage<result_type> result_;
+  storage<return_type> result_;
 };
 
-template<typename Func>
-async(Func) -> async<Func>;
+template<typename F>
+async(F) -> async<F>;
+
+namespace detail {
+
+template<typename Sync, task_value_type T>
+requires requires(Sync s) {
+  s.notify_awaitable_completed();
+}
+
+class [[nodiscard]] synchronized_task {
+  // Implement here....
+};
+
+template<awaitable A>
+using awaiter_for_t = decltype(detail::get_awaiter(std::declval<A>()));
+
+template<awaitable A>
+using await_result_t = decltype(std::declval<awaiter_for_t<A>>().await_resume());
+
+template<typename Sync, awaitable A>
+requires requires(Sync s) {
+  s.notify_awaitable_completed();
+}
+
+synchronized_task<Sync, remove_rvalue_reference_t<await_result_t<A>>> make_synchronized_task(A&& awaitable) {
+  co_return co_await std::forward<A>(awaitable);
+}
+
+} // namespace detail
+
+template<awaitable A>
+[[nodiscard]] decltype(auto) sync_await(A&& awaitable) {
+  struct sync {
+    std::binary_semaphore sem{0};
+
+    void notify_awaitable_completed() {
+      sem.release();
+    }
+  };
+
+  auto sync_task = detail::make_synchronized_task<sync>(std::forward<A>(awaitable));
+  sync work_done;
+  sync_task.start(work_done);
+  work_done.sem.acquire();
+  return sync_task.get();
+}
 
 task<int> func1() {
   const int result = co_await async([] { return 42; });
@@ -329,8 +413,7 @@ task<int> func3() {
   });
 
   std::osyncstream(std::cout) << "I will never tell you that the result is: " << result << '\n';
-
-  co_return result;
+  co_return 42;
 }
 
 task<void> example() {
@@ -339,17 +422,12 @@ task<void> example() {
 }
 
 template<typename T>
-void test(task<T> task) {
+void test(task<T> t) {
   try {
-    task.start();
-
-    using namespace std::chrono_literals;
-    std::this_thread::sleep_for(200ms);
-
     if constexpr (std::is_void_v<T>) {
-      task.get();
+      sync_await(t);
     } else {
-      std::cout << "Result: " << task.get() << '\n';
+      std::cout << "Result: " << sync_await(t) << '\n';
     }
   } catch (const std::exception& ex) {
     std::cout << "Exception caught: " << ex.what() << "\n";
