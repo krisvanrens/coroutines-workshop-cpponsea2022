@@ -1,11 +1,3 @@
-// - Implement `synchronized_task<T>`
-//   - `promise_type` should inherit from `task_promise_storage`
-//   - it should get a synchronization primitive through `start()` member function and release it on
-//     the final suspend
-//   - `get()` should return a value or rethrow an exception (if set)
-// - `task<T>` does not need any custom interface anymore
-//   - remove `start()` and `get()`
-
 #include <concepts>
 #include <coroutine>
 #include <exception>
@@ -215,7 +207,7 @@ struct task_promise_storage<void> : task_promise_storage_base<void> {
 
 } // namespace detail
 
-template<task_value_type T = void, typename Allocator = void>
+template<task_value_type T = void>
 class [[nodiscard]] task {
 public:
   struct promise_type : detail::task_promise_storage<T> {
@@ -255,18 +247,6 @@ public:
       }
     };
     return rvalue_awaiter({*promise_});
-  }
-
-  void start() const {
-    std::coroutine_handle<promise_type>::from_promise(*promise_).resume();
-  }
-
-  [[nodiscard]] decltype(auto) get() const& {
-    return promise_->get();
-  }
-
-  [[nodiscard]] decltype(auto) get() const&& {
-    return std::move(promise_)->get();
   }
 
 private:
@@ -356,7 +336,59 @@ requires requires(Sync s) {
 }
 
 class [[nodiscard]] synchronized_task {
-  // Implement here....
+public:
+  struct promise_type : detail::task_promise_storage<T> {
+    std::coroutine_handle<> continuation = std::noop_coroutine();
+    Sync* sync_ = nullptr;
+
+    void set_sync(Sync& sync) {
+      sync_ = &sync;
+    }
+
+    static std::suspend_always initial_suspend() noexcept {
+      return {};
+    }
+
+    static awaiter_of<void> auto final_suspend() noexcept {
+      struct final_awaiter : std::suspend_always {
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> h) noexcept {
+          auto promise = h.promise();
+
+          if (promise.sync_) {
+            promise.sync_->notify_awaitable_completed();
+          }
+
+          return promise.continuation;
+        }
+      };
+
+      return final_awaiter{};
+    }
+
+    synchronized_task get_return_object() noexcept {
+      return this;
+    }
+  };
+
+  void start(Sync& sync) const {
+    promise_->set_sync(sync);
+    std::coroutine_handle<promise_type>::from_promise(*promise_).resume();
+  }
+
+  [[nodiscard]] decltype(auto) get() const& {
+    return promise_->get();
+  }
+
+  [[nodiscard]] decltype(auto) get() const&& {
+    return std::move(promise_)->get();
+  }
+
+private:
+  promise_ptr<promise_type> promise_;
+
+  synchronized_task(promise_type* promise)
+    : promise_(promise) {
+  }
 };
 
 template<awaitable A>
