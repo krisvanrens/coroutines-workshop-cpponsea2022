@@ -45,7 +45,7 @@ public:
       return {};
     }
     void unhandled_exception() { throw; }
-    
+
     // disallow co_await in generator coroutines
     void await_transform() = delete;
   };
