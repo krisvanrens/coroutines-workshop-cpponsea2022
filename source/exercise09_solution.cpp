@@ -339,7 +339,7 @@ class [[nodiscard]] synchronized_task {
 public:
   struct promise_type : detail::task_promise_storage<T> {
     std::coroutine_handle<> continuation = std::noop_coroutine();
-    Sync* sync_ = nullptr;
+    Sync*                   sync_        = nullptr;
 
     void set_sync(Sync& sync) {
       sync_ = &sync;
