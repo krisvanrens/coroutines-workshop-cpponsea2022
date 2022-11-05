@@ -47,7 +47,7 @@ public:
       return {};
     }
     void unhandled_exception() { throw; }
-    
+
     // disallow co_await in generator coroutines
     void await_transform() = delete;
   };
@@ -61,7 +61,7 @@ public:
   public:
     using value_type = generator::value_type;
     using difference_type = std::ptrdiff_t;
-    
+
     iterator(iterator&& other) noexcept: handle_(std::exchange(other.handle_, {})) {}
     iterator& operator=(iterator&& other) noexcept
     {
