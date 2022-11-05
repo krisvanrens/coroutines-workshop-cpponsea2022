@@ -3,6 +3,7 @@
 //   - use `std::ptrdiff_t` for a `difference_type` in `iterator`
 
 #include <coroutine>
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -26,54 +27,78 @@ using promise_ptr = std::unique_ptr<T, coro_deleter>;
 template<typename T>
 class [[nodiscard]] generator {
 public:
-  using value_type = std::remove_reference_t<T>;
-  using reference  = std::conditional_t<std::is_reference_v<T>, T, const value_type&>;
-  using pointer    = const value_type*;
+  using value_t     = std::remove_reference_t<T>;
+  using reference_t = std::conditional_t<std::is_reference_v<T>, T, const value_t&>;
+  using pointer_t   = const value_t*;
 
   struct promise_type {
-    pointer value;
+    pointer_t value;
 
     static std::suspend_always initial_suspend() noexcept {
       return {};
     }
+
     static std::suspend_always final_suspend() noexcept {
       return {};
     }
+
     static void return_void() noexcept {
     }
 
     generator<T> get_return_object() noexcept {
       return this;
     }
-    std::suspend_always yield_value(reference v) noexcept {
+
+    std::suspend_always yield_value(reference_t v) noexcept {
       value = std::addressof(v);
       return {};
     }
+
     void unhandled_exception() {
       throw;
     }
 
-    // disallow co_await in generator coroutines
+    // Disallow co_await in generator coroutines.
     void await_transform() = delete;
   };
 
-  [[nodiscard]] bool next() {
+  class iterator {
+    std::coroutine_handle<promise_type> handle_;
+
+    friend generator;
+
+    explicit iterator(promise_type& promise) noexcept
+      : handle_{std::coroutine_handle<promise_type>::from_promise(promise)} {
+    }
+
+  public:
+    // TODO: move operations
+    // TODO: prefix operator++
+    // TODO: postfix operator++
+    // TODO: operator*
+    // TODO: operator->
+    // TODO: operator==
+  };
+
+  [[nodiscard]] iterator begin() {
     auto handle = std::coroutine_handle<promise_type>::from_promise(*promise_);
     handle.resume();
-    return !handle.done();
+    return iterator{*promise_};
   }
-  [[nodiscard]] const T& value() const {
-    return *promise_->value;
+
+  [[nodiscard]] std::default_sentinel_t end() const noexcept {
+    return {};
   }
 
 private:
   promise_ptr<promise_type> promise_;
+
   generator(promise_type* promise)
     : promise_(promise) {
   }
 };
 
-generator<std::uint64_t> iota(std::uint64_t start = 0) {
+generator<std::uint64_t> iota(std::uint64_t start = 0L) {
   while (true) {
     co_yield start++;
   }
