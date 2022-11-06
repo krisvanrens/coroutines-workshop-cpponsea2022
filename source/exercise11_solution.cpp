@@ -72,12 +72,38 @@ public:
     }
 
   public:
-    // TODO: move operations
-    // TODO: prefix operator++
-    // TODO: postfix operator++
-    // TODO: operator*
-    // TODO: operator->
-    // TODO: operator==
+    using value_t      = generator::value_t;
+    using difference_t = std::ptrdiff_t;
+
+    iterator(iterator&& other) noexcept
+      : handle_{std::exchange(other.handle_, {})} {
+    }
+
+    iterator& operator=(iterator&& other) noexcept {
+      handle_ = std::exchange(other.handle_, {});
+      return *this;
+    }
+
+    iterator& operator++() {
+      handle_.resume();
+      return *this;
+    }
+
+    void operator++(int) {
+      ++*this;
+    }
+
+    [[nodiscard]] reference_t operator*() const noexcept {
+      return *handle_.promise().value;
+    }
+
+    [[nodiscard]] pointer_t operator->() const noexcept {
+      return std::addressof(operator*());
+    }
+
+    [[nodiscard]] bool operator==(std::default_sentinel_t) const noexcept {
+      return handle_.done();
+    }
   };
 
   [[nodiscard]] iterator begin() {
@@ -97,6 +123,9 @@ private:
     : promise_(promise) {
   }
 };
+
+template<typename T>
+inline constexpr bool std::ranges::enable_view<generator<T>> = true;
 
 generator<std::uint64_t> iota(std::uint64_t start = 0L) {
   while (true) {
