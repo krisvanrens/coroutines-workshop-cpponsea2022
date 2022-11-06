@@ -23,12 +23,12 @@ using promise_ptr = std::unique_ptr<T, coro_deleter>;
 template<typename T>
 class [[nodiscard]] generator {
 public:
-  using value_t     = std::remove_reference_t<T>;
-  using reference_t = std::conditional_t<std::is_reference_v<T>, T, const value_t&>;
-  using pointer_t   = const value_t*;
+  using value_type = std::remove_reference_t<T>;
+  using reference  = std::conditional_t<std::is_reference_v<T>, T, const value_type&>;
+  using pointer    = const value_type*;
 
   struct promise_type {
-    pointer_t value;
+    pointer value;
 
     static std::suspend_always initial_suspend() noexcept {
       return {};
@@ -45,7 +45,7 @@ public:
       return this;
     }
 
-    std::suspend_always yield_value(reference_t v) noexcept {
+    std::suspend_always yield_value(reference v) noexcept {
       value = std::addressof(v);
       return {};
     }
@@ -69,7 +69,7 @@ public:
 
   public:
     // Required for ranges (names are predetermined).
-    using value_type      = generator::value_t;
+    using value_type      = generator::value_type;
     using difference_type = std::ptrdiff_t;
 
     iterator(iterator&& other) noexcept
@@ -90,11 +90,11 @@ public:
       ++*this;
     }
 
-    [[nodiscard]] reference_t operator*() const noexcept {
+    [[nodiscard]] reference operator*() const noexcept {
       return *handle_.promise().value;
     }
 
-    [[nodiscard]] pointer_t operator->() const noexcept {
+    [[nodiscard]] pointer operator->() const noexcept {
       return std::addressof(operator*());
     }
 
