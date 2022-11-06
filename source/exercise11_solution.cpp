@@ -1,9 +1,5 @@
-// - Remove `value()` and `next()` from `generator<T>`
-// - Make `generator<T>` an input range
-//   - use `std::ptrdiff_t` for a `difference_type` in `iterator`
-
-#include <coroutine>
 #include <concepts>
+#include <coroutine>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -72,8 +68,9 @@ public:
     }
 
   public:
-    using value_t      = generator::value_t;
-    using difference_t = std::ptrdiff_t;
+    // Required for ranges (names are predetermined).
+    using value_type      = generator::value_t;
+    using difference_type = std::ptrdiff_t;
 
     iterator(iterator&& other) noexcept
       : handle_{std::exchange(other.handle_, {})} {
