@@ -153,7 +153,7 @@ std::future<void> func2() {
   co_await std::suspend_never{};
 
   std::cout << "You shall not sleep!\n";
-  co_await 1s; // Should not compile
+  co_await 1s; // TODO: Should not compile
 }
 
 // - Refactor the previous exercise to use our `std::chrono::duration`-specific awaitable
